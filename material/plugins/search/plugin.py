@@ -150,11 +150,10 @@ class SearchIndex:
 
     # Override: graceful indexing and additional fields
     def create_entry_for_section(self, section, toc, url, page):
-        item = self._find_toc_by_id(toc, section.id)
-        if item:
+        if item := self._find_toc_by_id(toc, section.id):
             url = url + item.url
         elif section.id:
-            url = url + "#" + section.id
+            url = f"{url}#{section.id}"
 
         # Set page title as section title if none was given, which happens when
         # the first headline in a Markdown document is not a h1 headline. Also,
@@ -272,10 +271,7 @@ class Element:
 
     # Support comparison (compare by tag only)
     def __eq__(self, other):
-        if other is Element:
-            return self.tag == other.tag
-        else:
-            return self.tag == other
+        return self.tag == other.tag if other is Element else self.tag == other
 
     # Support set operations
     def __hash__(self):
@@ -306,10 +302,7 @@ class Section:
 
     # String representation
     def __repr__(self):
-        if self.id:
-            return "#".join([self.el.tag, self.id])
-        else:
-            return self.el.tag
+        return "#".join([self.el.tag, self.id]) if self.id else self.el.tag
 
     # Check whether the section should be excluded
     def is_excluded(self):
@@ -331,18 +324,10 @@ class Parser(HTMLParser):
         super().__init__(*args, **kwargs)
 
         # Tags to skip
-        self.skip = set([
-            "object",                  # Objects
-            "script",                  # Scripts
-            "style"                    # Styles
-        ])
+        self.skip = {"object", "script", "style"}
 
         # Tags to keep
-        self.keep = set([
-            "p",                       # Paragraphs
-            "code", "pre",             # Code blocks
-            "li", "ol", "ul"           # Lists
-        ])
+        self.keep = {"p", "code", "pre", "li", "ol", "ul"}
 
         # Current context and section
         self.context = []
@@ -357,28 +342,26 @@ class Parser(HTMLParser):
 
         # Ignore self-closing tags
         el = Element(tag, attrs)
-        if not tag in void:
+        if tag not in void:
             self.context.append(el)
         else:
             return
 
         # Handle headings
-        if tag in ([f"h{x}" for x in range(1, 7)]):
+        if tag in ([f"h{x}" for x in range(1, 7)]) and "id" in attrs:
             depth = len(self.context)
-            if "id" in attrs:
-
-                # Ensure top-level section
-                if tag != "h1" and not self.data:
-                    self.section = Section(Element("hx"), depth)
-                    self.data.append(self.section)
-
-                # Set identifier, if not first section
-                self.section = Section(el, depth)
-                if self.data:
-                    self.section.id = attrs["id"]
-
-                # Append section to list
+            # Ensure top-level section
+            if tag != "h1" and not self.data:
+                self.section = Section(Element("hx"), depth)
                 self.data.append(self.section)
+
+            # Set identifier, if not first section
+            self.section = Section(el, depth)
+            if self.data:
+                self.section.id = attrs["id"]
+
+            # Append section to list
+            self.data.append(self.section)
 
         # Handle preface - ensure top-level section
         if not self.section:
@@ -399,16 +382,14 @@ class Parser(HTMLParser):
                 return
 
         # Render opening tag if kept
-        if not self.skip.intersection(self.context):
-            if tag in self.keep:
+        if not self.skip.intersection(self.context) and tag in self.keep:
+            # Check whether we're inside the section title
+            data = self.section.text
+            if self.section.el in self.context:
+                data = self.section.title
 
-                # Check whether we're inside the section title
-                data = self.section.text
-                if self.section.el in self.context:
-                    data = self.section.title
-
-                # Append to section title or text
-                data.append(f"<{tag}>")
+            # Append to section title or text
+            data.append(f"<{tag}>")
 
     # Called at the end of every HTML tag
     def handle_endtag(self, tag):
@@ -436,42 +417,35 @@ class Parser(HTMLParser):
             return
 
         # Render closing tag if kept
-        if not self.skip.intersection(self.context):
-            if tag in self.keep:
+        if not self.skip.intersection(self.context) and tag in self.keep:
+            # Check whether we're inside the section title
+            data = self.section.text
+            if self.section.el in self.context:
+                data = self.section.title
 
-                # Check whether we're inside the section title
-                data = self.section.text
-                if self.section.el in self.context:
-                    data = self.section.title
+            # Search for corresponding opening tag
+            index = data.index(f"<{tag}>")
+            for i in range(index + 1, len(data)):
+                if not data[i].isspace():
+                    index = len(data)
+                    break
 
-                # Search for corresponding opening tag
-                index = data.index(f"<{tag}>")
-                for i in range(index + 1, len(data)):
-                    if not data[i].isspace():
-                        index = len(data)
-                        break
+            # Remove element if empty (or only whitespace)
+            if len(data) > index:
+                while len(data) > index:
+                    data.pop()
 
-                # Remove element if empty (or only whitespace)
-                if len(data) > index:
-                    while len(data) > index:
-                        data.pop()
-
-                # Append to section title or text
-                else:
-                    data.append(f"</{tag}>")
+            # Append to section title or text
+            else:
+                data.append(f"</{tag}>")
 
     # Called for the text contents of each tag
     def handle_data(self, data):
         if self.skip.intersection(self.context):
             return
 
-        # Collapse whitespace in non-pre contexts
-        if not "pre" in self.context:
-            if not data.isspace():
-                data = data.replace("\n", " ")
-            else:
-                data = " "
-
+        if "pre" not in self.context:
+            data = " " if data.isspace() else data.replace("\n", " ")
         # Handle preface - ensure top-level section
         if not self.section:
             self.section = Section(Element("hx"))
@@ -510,19 +484,19 @@ log = logging.getLogger("mkdocs")
 log.addFilter(DuplicateFilter())
 
 # Tags that are self-closing
-void = set([
-    "area",                    # Image map areas
-    "base",                    # Document base
-    "br",                      # Line breaks
-    "col",                     # Table columns
-    "embed",                   # External content
-    "hr",                      # Horizontal rules
-    "img",                     # Images
-    "input",                   # Input fields
-    "link",                    # Links
-    "meta",                    # Metadata
-    "param",                   # External parameters
-    "source",                  # Image source sets
-    "track",                   # Text track
-    "wbr"                      # Line break opportunities
-])
+void = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}

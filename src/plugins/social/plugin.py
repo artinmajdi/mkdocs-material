@@ -45,11 +45,8 @@ try:
 except ImportError:
     dependencies = False
 
-# -----------------------------------------------------------------------------
-# Class
-# -----------------------------------------------------------------------------
 
-# Social plugin configuration scheme
+
 class SocialPluginConfig(Config):
     enabled = opt.Type(bool, default = True)
     cache_dir = opt.Type(str, default = ".cache/plugin/social")
@@ -57,7 +54,7 @@ class SocialPluginConfig(Config):
     # Options for social cards
     cards = opt.Type(bool, default = True)
     cards_dir = opt.Type(str, default = "assets/images/social")
-    cards_color = opt.Type(dict, default = dict())
+    cards_color = opt.Type(dict, default={})
     cards_font = opt.Optional(opt.Type(str))
 
 # -----------------------------------------------------------------------------
@@ -127,11 +124,7 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
         file, _ = os.path.splitext(page.file.src_path)
 
         # Resolve path of image
-        path = "{}.png".format(os.path.join(
-            config.site_dir,
-            directory,
-            file
-        ))
+        path = f"{os.path.join(config.site_dir, directory, file)}.png"
 
         # Resolve path of image directory
         directory = os.path.dirname(path)
@@ -143,10 +136,10 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
 
         # Compute page title and description
         title = page.meta.get("title", page.title)
-        description = config.site_description or ""
         if "description" in page.meta:
             description = page.meta["description"]
-
+        else:
+            description = config.site_description or ""
         # Generate social card if not in cache - TODO: values from mkdocs.yml
         hash = md5("".join([
             site_name,
@@ -293,17 +286,12 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
         if not page.is_homepage:
             title = f"{title} - {config.site_name}"
 
-        # Compute page description
-        description = config.site_description
         if "description" in page.meta:
             description = page.meta["description"]
-
+        else:
+            description = config.site_description
         # Resolve image URL
-        url = "{}.png".format(posixpath.join(
-            config.site_url or ".",
-            directory,
-            file
-        ))
+        url = f'{posixpath.join(config.site_url or ".", directory, file)}.png'
 
         # Ensure forward slashes
         url = url.replace(os.path.sep, "/")
@@ -351,12 +339,8 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
             # Load PNG, JPEG, etc.
             return Image.open(path).convert("RGBA")
 
-        # Handle icons
-        logo = "material/library"
         icon = theme["icon"] or {}
-        if "logo" in icon and icon["logo"]:
-            logo = icon["logo"]
-
+        logo = icon["logo"] if "logo" in icon and icon["logo"] else "material/library"
         # Resolve path of package
         base = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
@@ -387,11 +371,7 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
 
             # Retrieve from theme (default: Roboto)
             theme = config.theme
-            if theme["font"]:
-                name = theme["font"]["text"]
-            else:
-                name = "Roboto"
-
+            name = theme["font"]["text"] if theme["font"] else "Roboto"
         # Retrieve font files, if not already done
         files = os.listdir(self.cache)
         files = [file for file in files if file.endswith(".ttf") or file.endswith(".otf")] or (
@@ -399,11 +379,10 @@ class SocialPlugin(BasePlugin[SocialPluginConfig]):
         )
 
         # Map available font weights to file paths
-        font = dict()
+        font = {}
         for file in files:
-            match = re.search(r"-(\w+)\.[ot]tf$", file)
-            if match:
-                font[match.group(1)] = os.path.join(self.cache, file)
+            if match := re.search(r"-(\w+)\.[ot]tf$", file):
+                font[match[1]] = os.path.join(self.cache, file)
 
         # Return available font weights with fallback
         return defaultdict(lambda: font["Regular"], font)

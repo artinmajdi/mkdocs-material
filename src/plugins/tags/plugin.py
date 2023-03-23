@@ -64,8 +64,7 @@ class TagsPlugin(BasePlugin[TagsPluginConfig]):
 
     # Hack: 2nd pass for tags index page(s)
     def on_nav(self, nav, config, files):
-        file = self.config.tags_file
-        if file:
+        if file := self.config.tags_file:
             self.tags_file = self._get_tags_file(files, file)
 
     # Build and render tags index page
@@ -100,7 +99,7 @@ class TagsPlugin(BasePlugin[TagsPluginConfig]):
 
     # Render tags index
     def _render_tag_index(self, markdown):
-        if not "[TAGS]" in markdown:
+        if "[TAGS]" not in markdown:
             markdown += "\n[TAGS]"
 
         # Replace placeholder in Markdown with rendered tags index
@@ -114,8 +113,7 @@ class TagsPlugin(BasePlugin[TagsPluginConfig]):
         classes = ["md-tag"]
         if isinstance(self.tags_map, dict):
             classes.append("md-tag-icon")
-            type = self.tags_map.get(tag)
-            if type:
+            if type := self.tags_map.get(tag):
                 classes.append(f"md-tag-icon--{type}")
 
         # Render section for tag and a link to each page
@@ -139,9 +137,8 @@ class TagsPlugin(BasePlugin[TagsPluginConfig]):
         type = self.tags_map.get(tag) if self.tags_map else None
         if not self.tags_file or not self.slugify:
             return dict(name = tag, type = type)
-        else:
-            url = f"{self.tags_file.url}#{self.slugify(tag)}"
-            return dict(name = tag, type = type, url = url)
+        url = f"{self.tags_file.url}#{self.slugify(tag)}"
+        return dict(name = tag, type = type, url = url)
 
 # -----------------------------------------------------------------------------
 # Data
